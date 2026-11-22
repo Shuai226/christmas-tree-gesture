@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Merry Christmas · 璀璨圣诞树 · 手势互动</title>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js"></script>
+<style>
+  :root{
+    --bg:#0a0e1f;
+    --cream:#f3ead8;
+    --gold:#ffd98a;
+    --gold-deep:#f2c14e;
+    --red:#c83a4a;
+    --green:#2f7d5b;
+    --panel:rgba(16,20,38,.72);
+    --panel-border:rgba(255,255,255,.09);
+    --muted:rgba(243,234,216,.55);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;color:var(--cream)}
+  #scene{position:fixed;inset:0;display:block}
+
+  /* ---------- 通用面板 ---------- */
+  .panel{
+    position:absolute;background:var(--panel);border:1px solid var(--panel-border);
+    border-radius:16px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    box-shadow:0 12px 40px rgba(0,0,0,.45);
+  }
+
+  /* ---------- 左上标题区 ---------- */
+  .hero{position:absolute;top:26px;left:30px;z-index:10;max-width:340px}
+  .eyebrow{font-size:11px;letter-spacing:.32em;color:var(--muted);text-transform:uppercase;margin-bottom:6px}
+  .hero h1{
+    font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:700;
+    font-size:38px;line-height:1.05;white-space:nowrap;
+    background:linear-gradient(120deg,#fff6e2 10%,var(--gold) 55%,#e9b95f 90%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 0 24px rgba(255,217,138,.18);
+  }
+  .hero .sub{margin-top:8px;font-size:13px;color:var(--muted);letter-spacing:.08em}
+  .countdown{display:flex;gap:8px;margin-top:14px}
+  .chip{
+    min-width:52px;padding:7px 10px;border-radius:10px;text-align:center;
+    background:rgba(255,255,255,.06);border:1px solid var(--panel-border);
+  }
+  .chip b{display:block;font-size:18px;font-variant-numeric:tabular-nums;color:var(--cream)}
+  .chip span{font-size:10px;color:var(--muted)}
+  .btn{
+    display:inline-flex;align-items:center;gap:6px;margin-top:14px;cursor:pointer;
+    padding:8px 14px;border-radius:10px;border:1px solid var(--panel-border);
+    background:rgba(255,255,255,.07);color:var(--cream);font-size:13px;transition:.2s;
+  }
+  .btn:hover{background:rgba(255,255,255,.14)}
+  .btn.active{background:rgba(200,58,74,.25);border-color:rgba(200,58,74,.5)}
+
+  /* ---------- 左侧回忆相册 ---------- */
+  .album{left:30px;top:230px;width:232px;padding:16px;z-index:9;transition:.3s;transform:translateX(-120%);opacity:0}
+  .album.open{transform:translateX(0);opacity:1}
+  .album h3{font-size:14px;margin-bottom:4px}
+  .album .note{font-size:10px;color:var(--muted);margin-bottom:12px;line-height:1.5}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .card{
+    aspect-ratio:3/4;border-radius:8px;border:1px solid var(--panel-border);
+    background:linear-gradient(160deg,rgba(255,255,255,.08),rgba(255,255,255,.02));
+    position:relative;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;
+  }
+  .card::after{content:"";position:absolute;left:0;right:0;bottom:0;height:5px;background:var(--strip,var(--red))}
+  .card.add,.card.empty{display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--muted);border-style:dashed}
+  .card .tag{position:absolute;top:6px;left:6px;font-size:8px;letter-spacing:.12em;color:rgba(255,255,255,.75);text-shadow:0 1px 3px rgba(0,0,0,.6)}
+  .card .del{
+    position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;
+    background:rgba(0,0,0,.55);color:#fff;font-size:12px;line-height:18px;text-align:center;
+    opacity:0;transition:.2s;z-index:2;
+  }
+  .card:hover .del{opacity:1}
+
+  /* ---------- 右上状态栏 ---------- */
+  .topbar{position:absolute;top:26px;right:30px;z-index:10;display:flex;align-items:center;gap:10px}
+  .status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);padding:8px 12px;border-radius:10px;background:var(--panel);border:1px solid var(--panel-border)}
+  .dot{width:7px;height:7px;border-radius:50%;background:#37d67a;box-shadow:0 0 8px #37d67a}
+  .dot.gray{background:#8a8f9e;box-shadow:none}
+  .dot.red{background:#e0566a;box-shadow:0 0 8px #e0566a}
+  .dot.yellow{background:#f2c14e;box-shadow:0 0 8px #f2c14e}
+  .icon-btn{
+    width:36px;height:36px;border-radius:10px;border:1px solid var(--panel-border);cursor:pointer;
+    background:var(--panel);color:var(--cream);font-size:15px;display:flex;align-items:center;justify-content:center;transition:.2s;
+  }
+  .icon-btn:hover{background:rgba(255,255,255,.14)}
+
+  /* ---------- 右侧布置面板 ---------- */
+  .settings{right:30px;top:80px;width:280px;padding:18px;z-index:9;transition:.3s;transform:translateX(120%);opacity:0}
+  .settings.open{transform:translateX(0);opacity:1}
+  .settings h3{font-size:15px;margin-bottom:14px}
+  .sec{margin-bottom:16px}
+  .sec-title{font-size:12px;color:var(--muted);margin-bottom:8px;letter-spacing:.05em}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;font-size:12px}
+  .row label{color:var(--cream)}
+  .row .val{color:var(--muted);font-variant-numeric:tabular-nums}
+  input[type=range]{flex:1;accent-color:var(--gold);height:4px;cursor:pointer}
+  .seg{display:flex;background:rgba(255,255,255,.06);border-radius:10px;padding:3px;gap:3px}
+  .seg button{flex:1;border:0;background:transparent;color:var(--muted);padding:7px 0;border-radius:8px;font-size:12px;cursor:pointer}
+  .seg button.on{background:rgba(255,255,255,.14);color:var(--cream)}
+  .swatches{display:flex;gap:8px}
+  .sw{width:26px;height:26px;border-radius:8px;cursor:pointer;border:2px solid transparent;outline:1px solid rgba(255,255,255,.15)}
+  .sw.on{border-color:#fff}
+  .music-btn{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(200,58,74,.4);background:rgba(200,58,74,.18);color:var(--cream);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+  .track{margin-top:8px;font-size:11px;color:var(--muted);display:flex;justify-content:space-between}
+  .upload{font-size:11px;color:var(--gold);cursor:pointer;margin-top:6px;display:inline-block}
+
+  /* ---------- 手势区 ---------- */
+  .gesture-tip{font-size:11px;color:var(--muted);line-height:1.9;margin-bottom:10px}
+  .gesture-btns{display:flex;gap:6px;margin-top:10px}
+  .gesture-btns button{
+    flex:1;padding:8px 0;border-radius:10px;border:1px solid var(--panel-border);
+    background:rgba(255,255,255,.06);color:var(--cream);font-size:12px;cursor:pointer;transition:.2s;
+  }
+  .gesture-btns button:hover{background:rgba(255,255,255,.14)}
+
+  /* ---------- 摄像头预览 ---------- */
+  .cam-preview{
+    position:absolute;right:30px;bottom:26px;width:168px;height:126px;z-index:11;
+    border-radius:14px;border:1px solid var(--panel-border);object-fit:cover;
+    transform:scaleX(-1);background:#000;display:none;
+    box-shadow:0 12px 40px rgba(0,0,0,.5);
+  }
+  .cam-preview.show{display:block}
+
+  /* ---------- 底部提示条 ---------- */
+  .hint{
+    position:absolute;bottom:26px;left:50%;transform:translateX(-50%);z-index:10;
+    padding:9px 18px;border-radius:999px;background:var(--panel);border:1px solid var(--panel-border);
+    font-size:12px;color:var(--muted);letter-spacing:.06em;white-space:nowrap;
+  }
+
+  /* ---------- 主题卡片弹窗 ---------- */
+  .card-overlay{
+    position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
+    opacity:0;pointer-events:none;transition:opacity .4s;
+  }
+  .card-overlay.show{opacity:1}
+  .frame{
+    width:min(300px,70vw);aspect-ratio:1/1.15;border:10px solid #141828;border-radius:6px;
+    background:radial-gradient(120% 120% at 50% 20%,#1c2340 0%,#0d1126 70%);
+    box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 60px rgba(255,217,138,.12);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;position:relative;overflow:hidden;
+  }
+  .frame .helix{position:absolute;inset:0;opacity:.5}
+  .frame .label{font-family:Georgia,serif;letter-spacing:.28em;font-size:22px;color:var(--gold);z-index:1}
+  .frame .sub{font-size:11px;color:var(--muted);z-index:1;letter-spacing:.1em}
+
+  /* ---------- 照片灯箱 ---------- */
+  .lightbox{
+    position:absolute;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;
+    background:rgba(5,8,18,.78);backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .35s;
+  }
+  .lightbox.show{opacity:1;pointer-events:auto}
+  .lb-frame{position:relative;display:flex;align-items:center;gap:14px}
+  .lb-photo{
+    width:min(380px,72vw);aspect-ratio:3/4;border:10px solid #141828;border-radius:8px;object-fit:cover;
+    box-shadow:0 30px 80px rgba(0,0,0,.65);background:#1c2340;
+  }
+  .lb-side{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .lb-label{font-family:Georgia,serif;letter-spacing:.28em;color:var(--gold);font-size:18px}
+  .lb-sub{font-size:11px;color:var(--muted);letter-spacing:.1em}
+  .lb-nav{
+    width:40px;height:40px;border-radius:50%;border:1px solid var(--panel-border);cursor:pointer;
+    background:var(--panel);color:var(--cream);font-size:18px;display:flex;align-items:center;justify-content:center;
+  }
+  .lb-nav:hover{background:rgba(255,255,255,.14)}
+  .lb-close{
+    position:absolute;top:-18px;right:-18px;width:34px;height:34px;border-radius:50%;border:0;cursor:pointer;
+    background:#2a3050;color:#fff;font-size:16px;
+  }
+  .lb-empty{
+    width:min(380px,72vw);aspect-ratio:3/4;border:10px solid #141828;border-radius:8px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--muted);font-size:13px;
+    background:radial-gradient(120% 120% at 50% 20%,#1c2340 0%,#0d1126 70%);text-align:center;padding:20px;
+  }
+
+  /* ---------- 开场问候 ---------- */
+  .intro{position:absolute;inset:0;z-index:15;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:16vh;pointer-events:none;transition:opacity 1s}
+  .intro h2{font-family:Georgia,serif;font-style:italic;font-size:52px;color:var(--cream);text-shadow:0 0 30px rgba(255,217,138,.3)}
+  .intro p{margin-top:10px;color:var(--muted);letter-spacing:.18em;font-size:14px}
+  .intro.hide{opacity:0}
+
+  @media (max-width:720px){
+    .hero{left:18px;top:18px}.hero h1{font-size:32px}
+    .album{top:190px}.settings{right:18px;width:250px}
+    .cam-preview{right:18px;width:120px;height:90px}
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<!-- 左上标题 / 倒计时 -->
+<div class="hero">
+  <div class="eyebrow">Christmas Eve is Coming</div>
+  <h1>Merry Christmas</h1>
+  <div class="sub" id="heroSub">璀璨圣诞树 · 点亮冬日心愿</div>
+  <div class="countdown">
+    <div class="chip"><b id="cdD">00</b><span>天</span></div>
+    <div class="chip"><b id="cdH">00</b><span>时</span></div>
+    <div class="chip"><b id="cdM">00</b><span>分</span></div>
+    <div class="chip"><b id="cdS">00</b><span>秒</span></div>
+  </div>
+  <button class="btn" id="albumBtn">🎁 回忆相册</button>
+</div>
+
+<!-- 左侧相册面板 -->
+<div class="panel album" id="albumPanel">
+  <h3>回忆相册</h3>
+  <div class="note">点击卡片上传照片，悬停可删除；照片仅保存在本地浏览器</div>
+  <div class="grid" id="albumGrid"></div>
+  <input type="file" id="photoFile" accept="image/*" multiple hidden />
+</div>
+
+<!-- 右上状态栏 -->
+<div class="topbar">
+  <div class="status"><span class="dot" id="gestureDot"></span><span id="gestureChipText">手势未开启</span></div>
+  <button class="icon-btn" id="pauseBtn" title="暂停/继续">⏸</button>
+  <button class="icon-btn" id="settingsBtn" title="圣诞布置">⚙</button>
+</div>
+
+<!-- 右侧布置面板 -->
+<div class="panel settings" id="settingsPanel">
+  <h3>圣诞布置</h3>
+
+  <div class="sec">
+    <div class="sec-title">手势控制（摄像头本地识别，不上传画面）</div>
+    <div class="gesture-tip">✊ 握拳 · 粒子汇聚成树<br>🖐 张开手掌 · 粒子散开<br>🤏 拇指食指捏合 · 弹出 / 切换照片</div>
+    <button class="music-btn" id="gestureBtn">✋ 开启手势识别</button>
+    <div class="track"><span id="gestureStatus">未开启</span><span id="gestureGlyph">—</span></div>
+    <div class="gesture-btns">
+      <button id="gFist">✊ 汇聚</button>
+      <button id="gOpen">🖐 散开</button>
+      <button id="gPinch">🤏 照片</button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">圣诞音乐</div>
+    <button class="music-btn" id="musicBtn">🎵 暂停音乐</button>
+    <div class="track"><span id="trackName">Christmas by Haim</span><span>♪</span></div>
+    <span class="upload" id="uploadLink">⬆ 上传本地音乐</span>
+    <input type="file" id="musicFile" accept="audio/*" hidden />
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">展示模式</div>
+    <div class="seg" id="modeSeg">
+      <button data-mode="tree" class="on">圣诞树</button>
+      <button data-mode="card">贺卡</button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">星光粒子</div>
+    <div class="row"><label>数量</label><input type="range" id="particleCount" min="1000" max="10000" step="200" value="6000"><span class="val" id="particleVal">6000</span></div>
+    <div class="row"><label>主色</label><div class="swatches" id="mainSwatches">
+      <div class="sw on" style="background:#ffd98a" data-c="#ffd98a"></div>
+      <div class="sw" style="background:#c83a4a" data-c="#c83a4a"></div>
+      <div class="sw" style="background:#7db4ff" data-c="#7db4ff"></div>
+    </div></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">礼物盒与彩球</div>
+    <div class="row"><label>礼物盒</label><input type="range" id="giftCount" min="0" max="400" step="10" value="120"><span class="val" id="giftVal">120</span></div>
+    <div class="row"><label>彩球</label><input type="range" id="baubleCount" min="0" max="400" step="10" value="120"><span class="val" id="baubleVal">120</span></div>
+    <div class="row"><label>配色</label><div class="swatches" id="giftSwatches">
+      <div class="sw on" style="background:#c83a4a" data-c="#c83a4a"></div>
+      <div class="sw" style="background:#2f7d5b" data-c="#2f7d5b"></div>
+      <div class="sw" style="background:#f2c14e" data-c="#f2c14e"></div>
+    </div></div>
+  </div>
+</div>
+
+<!-- 摄像头预览 -->
+<video id="camPreview" class="cam-preview" autoplay muted playsinline></video>
+
+<!-- 底部提示 -->
+<div class="hint">✊ 握拳汇聚 · 🖐 张开放散 · 🤏 捏合弹照片 · 点击屏幕绽放星光</div>
+
+<!-- 主题卡片 -->
+<div class="card-overlay" id="cardOverlay">
+  <div class="frame">
+    <svg class="helix" viewBox="0 0 300 340" preserveAspectRatio="none">
+      <path d="M150,20 C220,60 80,100 150,150 C220,200 80,240 150,320" fill="none" stroke="#ffd98a" stroke-width="2" opacity=".7"/>
+    </svg>
+    <div class="label" id="cardLabel">CHRISTMAS 01</div>
+    <div class="sub">愿今夜的星光，落在你身旁</div>
+  </div>
+</div>
+
+<!-- 照片灯箱 -->
+<div class="lightbox" id="lightbox">
+  <div class="lb-frame">
+    <button class="lb-nav" id="lbPrev">‹</button>
+    <div class="lb-side" id="lbContent"></div>
+    <button class="lb-nav" id="lbNext">›</button>
+    <button class="lb-close" id="lbClose">×</button>
+  </div>
+</div>
+
+<!-- 开场问候 -->
+<div class="intro" id="intro">
+  <h2>Merry Christmas</h2>
+  <p>愿今夜的星光，落在你身旁。</p>
+</div>
+
+<audio id="audioEl" loop></audio>
+
+<script>
+(() => {
+  "use strict";
+  const canvas = document.getElementById("scene");
+  const ctx = canvas.getContext("2d");
+  let W = 0, H = 0, DPR = 1, unit = 60, groundY = 0;
+
+  const TREE_H = 10;
+  const TREE_R = 4.2;
+  const MAX_PHOTOS = 8;
+
+  const settings = {
+    particleCount: 6000,
+    gifts: 120,
+    baubles: 120,
+    colorA: "#ffd98a",
+    colorB: "#c83a4a",
+    giftColor: "#c83a4a",
+    musicOn: true,
+  };
+
+  const skipIntro = /[?&]ready=1/.test(location.search);
+  const state = {
+    rot: 0,
+    paused: false,
+    time: 0,
+    intro: skipIntro ? 1 : 0,
+    burst: 0,
+    burstDir: [],
+    scatter: 0,
+    scatterTarget: 0,
+    mode: "tree",
+    lastCard: 0,
+    cardIndex: 0,
+  };
+
+  let stars = [];
+  function initStars(){
+    stars = [];
+    const n = Math.round(W * H / 9000);
+    for(let i=0;i<n;i++){
+      stars.push({x:Math.random()*W, y:Math.random()*H, r:Math.random()*1.4+.3, p:Math.random()*Math.PI*2, s:.5+Math.random()});
+    }
+  }
+
+  let flakes = [];
+  function initFlakes(){
+    flakes = [];
+    for(let i=0;i<130;i++){
+      flakes.push({x:Math.random()*W, y:Math.random()*H, r:Math.random()*2+.6, v:.3+Math.random()*.9, d:Math.random()*Math.PI*2});
+    }
+  }
+
+  let particles = [];
+  function buildParticles(){
+    particles = [];
+    const n = settings.particleCount;
+    for(let i=0;i<n;i++){
+      const t = Math.pow(Math.random(), .72);
+      const y = t * TREE_H;
+      const rMax = TREE_R * (1 - y / TREE_H);
+      const r = rMax * Math.sqrt(Math.random());
+      const theta = Math.random() * Math.PI * 2;
+      const a = Math.random()*Math.PI*2, b = Math.acos(2*Math.random()-1);
+      const spread = 6 + Math.random()*5;
+      particles.push({
+        r, theta, y,
+        scx: Math.sin(b)*Math.cos(a)*spread,
+        scy: Math.cos(b)*spread*.7 + 1,
+        scz: Math.sin(b)*Math.sin(a)*spread,
+        jitter: Math.random()*Math.PI*2,
+        size: Math.random()*1.2+.7,
+        warm: Math.random(),
+      });
+    }
+    state.burstDir = particles.map(()=>({x:(Math.random()-.5), y:(Math.random()-.5), z:(Math.random()-.5)}));
+  }
+
+  let gifts = [], baubles = [];
+  function buildOrnaments(){
+    gifts = []; baubles = [];
+    for(let i=0;i<settings.gifts;i++){
+      const a = Math.random()*Math.PI*2;
+      const r = TREE_R*(0.35+Math.random()*0.85);
+      gifts.push({x:Math.cos(a)*r, z:Math.sin(a)*r, y:Math.random()*1.0+.1, s:.11+Math.random()*.12, rot:Math.random()*Math.PI, spin:(Math.random()-.5)*.8, color:pickGiftColor()});
+    }
+    for(let i=0;i<settings.baubles;i++){
+      const t = Math.pow(Math.random(),.6);
+      const y = t*TREE_H*.95+.3;
+      const rMax = TREE_R*(1-y/TREE_H);
+      const r = rMax*(.75+Math.random()*.3);
+      const a = Math.random()*Math.PI*2;
+      baubles.push({x:Math.cos(a)*r, z:Math.sin(a)*r, y, s:.05+Math.random()*.07, gold:Math.random()>.4, phase:Math.random()*Math.PI*2});
+    }
+  }
+  function pickGiftColor(){
+    const palette = [settings.giftColor, "#2f7d5b", "#f2c14e", "#3a3f55"];
+    return palette[Math.floor(Math.random()*palette.length)];
+  }
+
+  function project(x,y,z){
+    const c = Math.cos(state.rot), s = Math.sin(state.rot);
+    const xr = x*c - z*s;
+    const zr = x*s + z*c;
+    const persp = 1600/(1600 + zr*70);
+    return {
+      sx: W/2 + xr*unit*persp,
+      sy: groundY - y*unit*persp + zr*.12*unit,
+      depth: zr, persp,
+    };
+  }
+
+  function drawBackground(){
+    const g = ctx.createRadialGradient(W/2, H*.55, 60, W/2, H*.55, Math.max(W,H)*.8);
+    g.addColorStop(0, "#1a2140");
+    g.addColorStop(.55, "#10152c");
+    g.addColorStop(1, "#070a18");
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+
+    const glow = ctx.createRadialGradient(W/2, groundY-TREE_H*unit*.4, 10, W/2, groundY-TREE_H*unit*.4, TREE_R*unit*1.4);
+    glow.addColorStop(0, "rgba(255,205,120,.16)");
+    glow.addColorStop(1, "rgba(255,205,120,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0,0,W,H);
+
+    for(const st of stars){
+      const tw = .5 + .5*Math.sin(state.time*st.s + st.p);
+      ctx.globalAlpha = .35 + .55*tw;
+      ctx.fillStyle = "#e8eeff";
+      ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawGround(){
+    const gw = TREE_R*unit*2.4, gh = gw*.22;
+    const g = ctx.createRadialGradient(W/2, groundY, 10, W/2, groundY, gw/2);
+    g.addColorStop(0, "rgba(246,240,226,.95)");
+    g.addColorStop(.55, "rgba(214,218,232,.6)");
+    g.addColorStop(1, "rgba(214,218,232,0)");
+    ctx.save();
+    ctx.translate(W/2, groundY);
+    ctx.scale(1, gh/(gw/2));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0,0,gw/2,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawSpiralRibbon(){
+    if(state.mode!=="tree") return;
+    const turns = 3.4, L = 120;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = `rgba(255,224,160,${.55*(1-state.scatter)})`;
+    ctx.lineWidth = 1.6;
+    ctx.shadowColor = "rgba(255,210,130,.6)";
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    let started = false;
+    for(let i=0;i<=L;i++){
+      const t = i/L;
+      const y = t*TREE_H;
+      const r = TREE_R*(1-y/TREE_H)*.9;
+      const a = t*turns*Math.PI*2 + state.rot;
+      const p = project(Math.cos(a)*r, y, Math.sin(a)*r);
+      if(!started){ctx.moveTo(p.sx,p.sy);started=true;} else ctx.lineTo(p.sx,p.sy);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawTreeParticles(){
+    if(state.mode!=="tree") return;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const introEase = easeOutCubic(Math.min(1, state.intro));
+    const sc = state.scatter;
+    for(let pi=0; pi<particles.length; pi++){
+      const p = particles[pi];
+      const c = Math.cos(state.rot), s = Math.sin(state.rot);
+
+      let tx = p.r*Math.cos(p.theta), tz = p.r*Math.sin(p.theta), ty = p.y;
+
+      if(introEase < 1){
+        const it = introEase;
+        tx = tx*it + (1-it)*Math.cos(p.jitter)*.6;
+        tz = tz*it + (1-it)*Math.sin(p.jitter)*.6;
+        ty = ty*it + (1-it)*(-1.5);
+      }
+      let x = tx*(1-sc) + p.scx*sc;
+      let y = ty*(1-sc) + p.scy*sc;
+      let z = tz*(1-sc) + p.scz*sc;
+
+      if(state.burst > 0){
+        const d = state.burstDir[pi] || {x:0,y:0,z:0};
+        x += d.x*state.burst*4; y += d.y*state.burst*3; z += d.z*state.burst*4;
+      }
+
+      const xr = x*c - z*s, zr = x*s + z*c;
+      const persp = 1600/(1600+zr*70);
+      const sx = W/2 + xr*unit*persp;
+      const sy = groundY - y*unit*persp + zr*.12*unit;
+      const depthA = .6 + .4*((zr+TREE_R)/(TREE_R*2));
+      const size = p.size*persp;
+      const col = p.warm > .85 ? settings.colorB : (p.warm > .3 ? settings.colorA : "#fff2cf");
+      ctx.globalAlpha = Math.min(1, depthA*(0.7+0.3*p.warm));
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(sx, sy, size, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawTopStar(){
+    if(state.mode!=="tree") return;
+    const p = project(0, TREE_H+.35, 0);
+    const pulse = 1 + .12*Math.sin(state.time*3);
+    const R = .42*unit*p.persp*pulse, r = R*.45;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 1-state.scatter;
+    ctx.shadowColor = "#ffe9a8"; ctx.shadowBlur = 24;
+    ctx.fillStyle = "#ffe9a8";
+    ctx.beginPath();
+    for(let i=0;i<10;i++){
+      const ang = -Math.PI/2 + i*Math.PI/5;
+      const rad = i%2===0 ? R : r;
+      const x = p.sx + Math.cos(ang)*rad, y = p.sy + Math.sin(ang)*rad;
+      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawGifts(){
+    if(state.mode!=="tree") return;
+    ctx.save(); ctx.globalAlpha = 1-state.scatter;
+    for(const g of gifts){
+      const rot = g.rot + state.time*g.spin;
+      const p = project(g.x, g.y, g.z);
+      const s = g.s*unit*p.persp;
+      ctx.save();
+      ctx.translate(p.sx, p.sy);
+      ctx.rotate(rot*.3);
+      ctx.fillStyle = g.color;
+      ctx.fillRect(-s/2, -s/2, s, s);
+      ctx.fillStyle = "rgba(255,255,255,.25)";
+      ctx.fillRect(-s/2, -s*.1, s, s*.2);
+      ctx.fillRect(-s*.1, -s/2, s*.2, s);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function drawBaubles(){
+    if(state.mode!=="tree") return;
+    ctx.save(); ctx.globalAlpha = (1-state.scatter)*.9;
+    for(const b of baubles){
+      const p = project(b.x, b.y, b.z);
+      const s = b.s*unit*p.persp;
+      ctx.fillStyle = b.gold ? "#e9b95f" : "#c83a4a";
+      ctx.beginPath(); ctx.arc(p.sx, p.sy, s, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.5)";
+      ctx.beginPath(); ctx.arc(p.sx-s*.3, p.sy-s*.3, s*.28, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  let photos = [];
+  let photoSlots = [];
+  function rebuildSlots(){
+    photoSlots = photos.map(()=>({
+      theta: Math.random()*Math.PI*2,
+      y: 1.2 + Math.random()*(TREE_H-2),
+      r: TREE_R*(0.75+Math.random()*.55),
+      bob: Math.random()*Math.PI*2,
+    }));
+  }
+  function drawFloatingPhotos(){
+    if(state.mode!=="tree" || !photos.length) return;
+    photos.forEach((ph,i)=>{
+      const slot = photoSlots[i]; if(!slot || !ph.img) return;
+      const bobY = Math.sin(state.time*1.2 + slot.bob)*.15;
+      const p = project(Math.cos(slot.theta)*slot.r, slot.y+bobY, Math.sin(slot.theta)*slot.r);
+      const w = 1.05*unit*p.persp, h = w*1.25;
+      ctx.save();
+      ctx.globalAlpha = .92*(1-state.scatter*.5);
+      ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 12;
+      ctx.drawImage(ph.img, p.sx-w/2, p.sy-h/2, w, h);
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(243,234,216,.85)"; ctx.lineWidth = 2;
+      ctx.strokeRect(p.sx-w/2, p.sy-h/2, w, h);
+      ctx.restore();
+    });
+  }
+
+  function drawFlakes(){
+    ctx.save();
+    ctx.fillStyle = "rgba(235,240,255,.8)";
+    for(const f of flakes){
+      f.y += f.v; f.x += Math.sin(state.time + f.d)*.3;
+      if(f.y > H+5){f.y=-5; f.x=Math.random()*W;}
+      ctx.globalAlpha = .4 + .4*Math.random();
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawCardMode(){
+    if(state.mode!=="card") return;
+    ctx.fillStyle = "rgba(7,10,24,.55)";
+    ctx.fillRect(0,0,W,H);
+  }
+
+  let last = performance.now();
+  function loop(now){
+    const dt = Math.min(.05, (now-last)/1000); last = now;
+    if(!state.paused){
+      state.time += dt;
+      state.rot += dt*.18;
+      if(state.intro < 1) state.intro = Math.min(1, state.intro + dt/3.2);
+      state.burst = Math.max(0, state.burst - dt*.9);
+      state.scatter += (state.scatterTarget - state.scatter) * Math.min(1, dt*2.5);
+    }
+
+    drawBackground();
+    drawGround();
+    drawSpiralRibbon();
+    drawTreeParticles();
+    drawGifts();
+    drawBaubles();
+    drawFloatingPhotos();
+    drawTopStar();
+    drawFlakes();
+    drawCardMode();
+
+    if(state.time - state.lastCard > 14 && state.intro >= 1){
+      state.lastCard = state.time;
+      triggerBurst();
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  function triggerBurst(){
+    state.burst = 1;
+    state.cardIndex = (state.cardIndex % 10) + 1;
+    showCard("CHRISTMAS " + String(state.cardIndex).padStart(2,"0"));
+    setTimeout(()=>{ state.burst = 0; }, 700);
+  }
+
+  function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
+
+  function updateCountdown(){
+    const now = new Date();
+    let target = new Date(now.getFullYear(), 11, 25, 0, 0, 0);
+    if(now > target) target = new Date(now.getFullYear()+1, 11, 25, 0, 0, 0);
+    let diff = Math.max(0, target - now);
+    const d = Math.floor(diff/86400000); diff -= d*86400000;
+    const h = Math.floor(diff/3600000); diff -= h*3600000;
+    const m = Math.floor(diff/60000); diff -= m*60000;
+    const s = Math.floor(diff/1000);
+    cdD.textContent = String(d).padStart(2,"0");
+    cdH.textContent = String(h).padStart(2,"0");
+    cdM.textContent = String(m).padStart(2,"0");
+    cdS.textContent = String(s).padStart(2,"0");
+  }
+
+  const $ = id => document.getElementById(id);
+  const cdD=$("cdD"), cdH=$("cdH"), cdM=$("cdM"), cdS=$("cdS");
+
+  $("albumBtn").onclick = () => $("albumPanel").classList.toggle("open");
+  $("settingsBtn").onclick = () => $("settingsPanel").classList.toggle("open");
+
+  $("pauseBtn").onclick = () => {
+    state.paused = !state.paused;
+    $("pauseBtn").textContent = state.paused ? "▶" : "⏸";
+  };
+
+  document.querySelectorAll("#modeSeg button").forEach(btn=>{
+    btn.onclick = () => {
+      document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.remove("on"));
+      btn.classList.add("on");
+      state.mode = btn.dataset.mode;
+      $("modeLabel") && ($("modeLabel").textContent = state.mode==="tree" ? "圣诞树模式" : "贺卡模式");
+      if(state.mode==="card") showCard("CHRISTMAS 01"); else hideCard();
+    };
+  });
+
+  $("particleCount").oninput = e => {
+    settings.particleCount = +e.target.value;
+    $("particleVal").textContent = settings.particleCount;
+    buildParticles();
+  };
+  $("giftCount").oninput = e => { settings.gifts=+e.target.value; $("giftVal").textContent=settings.gifts; buildOrnaments(); };
+  $("baubleCount").oninput = e => { settings.baubles=+e.target.value; $("baubleVal").textContent=settings.baubles; buildOrnaments(); };
+
+  document.querySelectorAll("#mainSwatches .sw").forEach(sw=>{
+    sw.onclick = () => {
+      document.querySelectorAll("#mainSwatches .sw").forEach(x=>x.classList.remove("on"));
+      sw.classList.add("on"); settings.colorA = sw.dataset.c;
+    };
+  });
+  document.querySelectorAll("#giftSwatches .sw").forEach(sw=>{
+    sw.onclick = () => {
+      document.querySelectorAll("#giftSwatches .sw").forEach(x=>x.classList.remove("on"));
+      sw.classList.add("on"); settings.giftColor = sw.dataset.c; buildOrnaments();
+    };
+  });
+
+  const audio = $("audioEl");
+  $("musicBtn").onclick = () => {
+    settings.musicOn = !settings.musicOn;
+    if(settings.musicOn){ audio.play().catch(()=>{}); $("musicBtn").textContent="🎵 暂停音乐"; }
+    else { audio.pause(); $("musicBtn").textContent="🎵 播放音乐"; }
+  };
+  $("uploadLink").onclick = () => $("musicFile").click();
+  $("musicFile").onchange = e => {
+    const f = e.target.files[0];
+    if(!f) return;
+    audio.src = URL.createObjectURL(f);
+    $("trackName").textContent = f.name;
+    audio.play().catch(()=>{});
+    settings.musicOn = true; $("musicBtn").textContent="🎵 暂停音乐";
+  };
+
+  const grid = $("albumGrid");
+  const photoFile = $("photoFile");
+  const LS_KEY = "xmas-photos-v1";
+
+  function loadPhotos(){
+    try{
+      const raw = localStorage.getItem(LS_KEY);
+      if(!raw) return;
+      const arr = JSON.parse(raw);
+      arr.forEach(d=>{
+        const img = new Image();
+        img.onload = () => photos.push({dataUrl:d, img});
+        img.src = d;
+      });
+    }catch(e){}
+  }
+  function savePhotos(){
+    try{ localStorage.setItem(LS_KEY, JSON.stringify(photos.map(p=>p.dataUrl))); }
+    catch(e){}
+  }
+  function compressFile(file){
+    return new Promise((res,rej)=>{
+      const fr = new FileReader();
+      fr.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const max = 480;
+          let w = img.width, h = img.height;
+          if(w>max || h>max){ const k = max/Math.max(w,h); w=Math.round(w*k); h=Math.round(h*k); }
+          const c = document.createElement("canvas"); c.width=w; c.height=h;
+          c.getContext("2d").drawImage(img,0,0,w,h);
+          res({dataUrl:c.toDataURL("image/jpeg",.85), img});
+        };
+        img.onerror = rej; img.src = fr.result;
+      };
+      fr.onerror = rej; fr.readAsDataURL(file);
+    });
+  }
+
+  function renderAlbum(){
+    grid.innerHTML = "";
+    const add = document.createElement("div");
+    add.className = "card add"; add.textContent = "+";
+    add.title = "上传照片";
+    add.onclick = () => photoFile.click();
+    grid.appendChild(add);
+
+    photos.forEach((ph,i)=>{
+      const el = document.createElement("div");
+      el.className = "card";
+      el.style.backgroundImage = `url(${ph.dataUrl})`;
+      el.innerHTML = `<span class="tag">CHRISTMAS ${String(i+1).padStart(2,"0")}</span><span class="del" title="删除">×</span>`;
+      el.onclick = () => openPhoto(i);
+      el.querySelector(".del").onclick = (ev) => { ev.stopPropagation(); deletePhoto(i); };
+      grid.appendChild(el);
+    });
+
+    const empty = MAX_PHOTOS - photos.length;
+    for(let i=0;i<empty;i++){
+      const el = document.createElement("div");
+      el.className = "card empty"; el.textContent = "🖼";
+      el.onclick = () => photoFile.click();
+      grid.appendChild(el);
+    }
+  }
+
+  async function addFiles(fileList){
+    const files = Array.from(fileList||[]).filter(f=>f.type.startsWith("image/"));
+    for(const f of files){
+      if(photos.length >= MAX_PHOTOS) break;
+      try{
+        const ph = await compressFile(f);
+        photos.push(ph);
+      }catch(e){}
+    }
+    savePhotos(); renderAlbum(); rebuildSlots();
+  }
+  function deletePhoto(i){
+    photos.splice(i,1);
+    savePhotos(); renderAlbum(); rebuildSlots();
+    if(lightbox.classList.contains("show")) closeLightbox();
+  }
+  photoFile.onchange = e => { addFiles(e.target.files); photoFile.value = ""; };
+
+  const lightbox = $("lightbox");
+  const lbContent = $("lbContent");
+  let lbIndex = 0;
+
+  function openPhoto(i){
+    if(!photos.length){
+      lbContent.innerHTML = `<div class="lb-empty">🖼<div>相册还没有照片<br>先在左侧上传一张吧</div></div>`;
+      lightbox.classList.add("show");
+      return;
+    }
+    lbIndex = (i + photos.length) % photos.length;
+    renderLightbox();
+    lightbox.classList.add("show");
+  }
+  function renderLightbox(){
+    const ph = photos[lbIndex];
+    lbContent.innerHTML = `
+      <img class="lb-photo" src="${ph.dataUrl}" alt="照片 ${lbIndex+1}" />
+      <div class="lb-label">CHRISTMAS ${String(lbIndex+1).padStart(2,"0")}</div>
+      <div class="lb-sub">🤏 捏合手势切换下一张</div>`;
+  }
+  function nextPhoto(){ if(photos.length) openPhoto(lbIndex+1); else openPhoto(0); }
+  function prevPhoto(){ if(photos.length) openPhoto(lbIndex-1); }
+  function closeLightbox(){ lightbox.classList.remove("show"); }
+
+  $("lbClose").onclick = closeLightbox;
+  $("lbNext").onclick = nextPhoto;
+  $("lbPrev").onclick = prevPhoto;
+  lightbox.addEventListener("click", e => { if(e.target===lightbox) closeLightbox(); });
+
+  let hands = null, camera = null;
+  const gestureBuffer = [];
+  let lastPinch = 0;
+  const videoEl = $("camPreview");
+
+  function setGestureStatus(text, level){
+    $("gestureStatus").textContent = text;
+    $("gestureChipText").textContent = text;
+    const dot = $("gestureDot");
+    dot.className = "dot" + (level==="ok" ? "" : level==="err" ? " red" : level==="warn" ? " yellow" : " gray");
+  }
+
+  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+
+  function classifyGesture(lm){
+    const tips=[8,12,16,20], pips=[6,10,14,18];
+    let extended = 0;
+    for(let i=0;i<4;i++){
+      if(dist(lm[tips[i]], lm[0]) > dist(lm[pips[i]], lm[0])*1.12) extended++;
+    }
+    const pinch = dist(lm[4], lm[8]) < 0.06;
+    if(pinch) return "pinch";
+    if(extended <= 1) return "fist";
+    if(extended >= 4) return "open";
+    return "unknown";
+  }
+
+  function applyGesture(g){
+    const now = performance.now();
+    if(g==="fist"){
+      setShape("tree");
+      setGestureStatus("✊ 握拳 · 汇聚成树", "ok");
+    }else if(g==="open"){
+      setShape("scatter");
+      setGestureStatus("🖐 张开 · 粒子散开", "ok");
+    }else if(g==="pinch"){
+      setGestureStatus("🤏 捏合 · 弹出照片", "ok");
+      if(now - lastPinch > 900){ lastPinch = now; nextPhoto(); }
+    }else{
+      setGestureStatus("识别中…", "warn");
+    }
+  }
+
+  function setShape(shape){
+    state.scatterTarget = shape==="scatter" ? 1 : 0;
+  }
+
+  function onHandsResults(results){
+    const lm = results.multiHandLandmarks && results.multiHandLandmarks[0];
+    if(!lm){ setGestureStatus("未检测到手", "warn"); return; }
+    const g = classifyGesture(lm);
+    gestureBuffer.push(g);
+    if(gestureBuffer.length > 5) gestureBuffer.shift();
+    const tally = {};
+    gestureBuffer.forEach(x=>tally[x]=(tally[x]||0)+1);
+    const dom = Object.keys(tally).sort((a,b)=>tally[b]-tally[a])[0];
+    applyGesture(dom);
+  }
+
+  async function enableGesture(){
+    if(typeof Hands === "undefined" || typeof Camera === "undefined"){
+      setGestureStatus("识别库加载失败（需联网）", "err");
+      return;
+    }
+    try{
+      if(!hands){
+        hands = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}` });
+        hands.setOptions({ maxNumHands:1, modelComplexity:0, minDetectionConfidence:.6, minTrackingConfidence:.5 });
+        hands.onResults(onHandsResults);
+      }
+      if(!camera){
+        camera = new Camera(videoEl, {
+          onFrame: async () => { await hands.send({ image: videoEl }); },
+          width: 320, height: 240,
+        });
+      }
+      await camera.start();
+      videoEl.classList.add("show");
+      setGestureStatus("识别中 · 伸出手", "ok");
+      $("gestureBtn").textContent = "✋ 重新开启手势识别";
+    }catch(err){
+      setGestureStatus("摄像头未授权或不可用", "err");
+    }
+  }
+  $("gestureBtn").onclick = enableGesture;
+
+  $("gFist").onclick = () => { setShape("tree"); setGestureStatus("✊ 汇聚成树", "ok"); };
+  $("gOpen").onclick = () => { setShape("scatter"); setGestureStatus("🖐 粒子散开", "ok"); };
+  $("gPinch").onclick = () => nextPhoto();
+
+  const overlay = $("cardOverlay");
+  let cardTimer = null;
+  function showCard(label){
+    $("cardLabel").textContent = label;
+    overlay.classList.add("show");
+    clearTimeout(cardTimer);
+    cardTimer = setTimeout(hideCard, 2600);
+  }
+  function hideCard(){ overlay.classList.remove("show"); }
+
+  canvas.addEventListener("pointerdown", e=>{
+    for(let i=0;i<24;i++){
+      const a = Math.random()*Math.PI*2, v = 1+Math.random()*3;
+      flakes.push({x:e.clientX, y:e.clientY, r:Math.random()*2+1, v:Math.cos(a)*v*.4, d:a});
+    }
+  });
+
+  function resize(){
+    DPR = Math.min(2, window.devicePixelRatio||1);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W*DPR; canvas.height = H*DPR;
+    canvas.style.width = W+"px"; canvas.style.height = H+"px";
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    unit = Math.min(W,H)*.052;
+    groundY = H*.78;
+    initStars(); initFlakes();
+  }
+  window.addEventListener("resize", resize);
+
+  resize();
+  buildParticles();
+  buildOrnaments();
+  loadPhotos();
+  renderAlbum();
+  rebuildSlots();
+  updateCountdown();
+  setInterval(updateCountdown, 1000);
+  requestAnimationFrame(loop);
+
+  if(skipIntro){ const introEl=$("intro"); introEl.classList.add("hide"); introEl.style.display="none"; }
+  else setTimeout(()=>$("intro").classList.add("hide"), 3600);
+
+  if(/[?&]panels=1/.test(location.search)){
+    $("albumPanel").classList.add("open");
+    $("settingsPanel").classList.add("open");
+  }
+})();
+</script>
+</body>
+</html>
